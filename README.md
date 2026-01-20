@@ -4,6 +4,7 @@ A secure command-line password manager built with Python, using industry-standar
 
 ## Features
 
+- **Interactive menu mode** - user-friendly interface for managing passwords
 - **Argon2id** key derivation (memory-hard, resistant to GPU/ASIC attacks)
 - **AES-256-GCM** authenticated encryption
 - SQLite storage for encrypted credentials
@@ -23,12 +24,43 @@ pip install -r password_manager/requirements.txt
 
 ## Usage
 
-### Initialize (first-time setup)
+### Interactive Mode (Recommended)
+
+Run without arguments to launch the interactive menu:
+
+```bash
+python -m password_manager.main
+```
+
+```
+=== Password Manager ===
+
+Enter master password: ********
+
+Unlocked successfully!
+
+What would you like to do?
+1. Add new password
+2. View saved passwords
+3. Generate a password
+4. Delete a password
+5. Exit
+
+Choice: _
+```
+
+The interactive mode handles first-time setup automatically and lets you perform multiple actions without re-entering your master password.
+
+### CLI Commands
+
+For scripting or quick access, use direct commands:
+
+#### Initialize (first-time setup)
 ```bash
 python -m password_manager.main init
 ```
 
-### Add a credential
+#### Add a credential
 ```bash
 python -m password_manager.main add github
 ```
