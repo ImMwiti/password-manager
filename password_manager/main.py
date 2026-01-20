@@ -268,6 +268,231 @@ def cmd_generate(args) -> int:
     return 0
 
 
+def menu_add(manager) -> None:
+    """Interactive menu: Add a new credential."""
+    service = input("Service name (e.g., GitHub, Gmail): ").strip()
+    if not service:
+        print("Error: Service name cannot be empty.")
+        return
+
+    username = input("Username: ").strip()
+    if not username:
+        print("Error: Username cannot be empty.")
+        return
+
+    print("Enter password (or press Enter to generate one):")
+    credential_password = getpass.getpass("Password: ")
+
+    if not credential_password:
+        credential_password = manager.generate_password(16)
+        print(f"Generated password: {credential_password}")
+
+    try:
+        manager.add(service, username, credential_password)
+        print(f"Credential for '{service}' added successfully!")
+    except ValueError as e:
+        print(f"Error: {e}")
+
+
+def menu_view(manager) -> None:
+    """Interactive menu: View saved passwords."""
+    services = manager.list_services()
+
+    if not services:
+        print("No credentials stored yet.")
+        return
+
+    print("\nStored services:")
+    print("-" * 30)
+    for i, service in enumerate(services, 1):
+        print(f"  {i}. {service}")
+    print()
+
+    choice = input("Enter number to view details (or press Enter to go back): ").strip()
+    if not choice:
+        return
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(services):
+            service = services[idx]
+            credentials = manager.get(service)
+
+            print(f"\nCredentials for '{service}':")
+            print("-" * 40)
+
+            for cred in credentials:
+                print(f"  Username: {cred['username']}")
+                print(f"  Password: {cred['password']}")
+                print(f"  Created:  {cred['created_at']}")
+                print(f"  Updated:  {cred['updated_at']}")
+                print()
+        else:
+            print("Invalid selection.")
+    except ValueError:
+        print("Invalid input.")
+
+
+def menu_generate(manager) -> None:
+    """Interactive menu: Generate a random password."""
+    length_input = input("Password length (default 16): ").strip()
+
+    if length_input:
+        try:
+            length = int(length_input)
+            if length < 8:
+                print("Warning: Password length should be at least 8 characters.")
+                length = max(length, 4)
+        except ValueError:
+            print("Invalid length, using default of 16.")
+            length = 16
+    else:
+        length = 16
+
+    password = manager.generate_password(length)
+    print(f"\nGenerated password: {password}")
+    print(f"Length: {len(password)} characters")
+
+
+def menu_delete(manager) -> None:
+    """Interactive menu: Delete a credential."""
+    services = manager.list_services()
+
+    if not services:
+        print("No credentials stored yet.")
+        return
+
+    print("\nStored services:")
+    print("-" * 30)
+    for i, service in enumerate(services, 1):
+        print(f"  {i}. {service}")
+    print()
+
+    choice = input("Enter number to delete (or press Enter to cancel): ").strip()
+    if not choice:
+        return
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(services):
+            service = services[idx]
+            credentials = manager.get(service)
+
+            if len(credentials) == 1:
+                cred = credentials[0]
+                confirm = input(
+                    f"Delete credential for '{cred['username']}' at '{service}'? (y/N): "
+                )
+                if confirm.lower() == 'y':
+                    if manager.delete(service, cred['username']):
+                        print("Credential deleted successfully.")
+                    else:
+                        print("Error: Failed to delete credential.")
+                else:
+                    print("Deletion cancelled.")
+            else:
+                print(f"\nMultiple credentials found for '{service}':")
+                for i, cred in enumerate(credentials, 1):
+                    print(f"  {i}. {cred['username']}")
+
+                sub_choice = input("\nEnter number to delete (or 'c' to cancel): ")
+                if sub_choice.lower() == 'c':
+                    print("Deletion cancelled.")
+                    return
+
+                try:
+                    sub_idx = int(sub_choice) - 1
+                    if 0 <= sub_idx < len(credentials):
+                        cred = credentials[sub_idx]
+                        if manager.delete_by_id(cred['id']):
+                            print(f"Credential for '{cred['username']}' deleted.")
+                        else:
+                            print("Error: Failed to delete credential.")
+                    else:
+                        print("Invalid selection.")
+                except ValueError:
+                    print("Invalid input.")
+        else:
+            print("Invalid selection.")
+    except ValueError:
+        print("Invalid input.")
+
+
+def interactive_menu(manager) -> None:
+    """Main interactive menu loop."""
+    while True:
+        print("\nWhat would you like to do?")
+        print("1. Add new password")
+        print("2. View saved passwords")
+        print("3. Generate a password")
+        print("4. Delete a password")
+        print("5. Exit")
+
+        choice = input("\nChoice: ").strip()
+
+        if choice == "1":
+            menu_add(manager)
+        elif choice == "2":
+            menu_view(manager)
+        elif choice == "3":
+            menu_generate(manager)
+        elif choice == "4":
+            menu_delete(manager)
+        elif choice == "5":
+            print("\nGoodbye!")
+            break
+        else:
+            print("Invalid choice. Please enter 1-5.")
+
+
+def cmd_interactive(args) -> int:
+    """Run the interactive menu mode."""
+    manager = get_manager(args.database)
+
+    print("\n=== Password Manager ===\n")
+
+    if not manager.is_initialized:
+        print("Password Manager is not initialized.")
+        setup = input("Would you like to set it up now? (y/N): ").strip()
+        if setup.lower() != 'y':
+            print("Run 'password-manager init' to initialize.")
+            return 1
+
+        print("\nChoose a strong master password (minimum 8 characters).\n")
+        password = prompt_master_password("Enter master password: ")
+        confirm = prompt_master_password("Confirm master password: ")
+
+        if password != confirm:
+            print("Error: Passwords do not match.")
+            return 1
+
+        try:
+            manager.setup(password)
+            print("\nPassword Manager initialized successfully!")
+            print(f"Database location: {args.database or DEFAULT_DB_PATH}\n")
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
+
+        # Unlock after setup
+        manager.unlock(password)
+        print("Unlocked successfully!")
+    else:
+        password = prompt_master_password("Enter master password: ")
+        try:
+            manager.unlock(password)
+            print("\nUnlocked successfully!")
+        except InvalidPasswordError:
+            print("Error: Invalid master password.")
+            return 1
+
+    try:
+        interactive_menu(manager)
+        return 0
+    finally:
+        manager.lock()
+
+
 def cmd_change_master(args) -> int:
     """Change the master password."""
     manager = get_manager(args.database)
@@ -319,8 +544,7 @@ def main():
 
     subparsers = parser.add_subparsers(
         title="commands",
-        dest="command",
-        required=True
+        dest="command"
     )
 
     # init command
@@ -405,7 +629,11 @@ def main():
     args = parser.parse_args()
 
     try:
-        sys.exit(args.func(args))
+        # Default to interactive mode if no command specified
+        if args.command is None:
+            sys.exit(cmd_interactive(args))
+        else:
+            sys.exit(args.func(args))
     except KeyboardInterrupt:
         print("\nOperation cancelled.")
         sys.exit(1)
